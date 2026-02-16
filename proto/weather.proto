@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package weather.v1;
+
+option go_package = "weather/proto;weatherpb";
+
+import "google/protobuf/timestamp.proto";
+import "buf/validate/validate.proto";
+
+service WeatherService {
+  rpc GetCurrentWeather(GetCurrentWeatherRequest) returns (GetCurrentWeatherResponse);
+  rpc GetForecast(GetForecastRequest) returns (GetForecastResponse);
+}
+
+message GetCurrentWeatherRequest {
+  string city = 1 [
+    (buf.validate.field).string = { min_len: 2, max_len: 64 }
+  ];
+}
+
+message GetCurrentWeatherResponse {
+    string city = 1;
+    double temperature_c = 2;
+    double wind_speed_ms = 3;
+    int32 weather_code = 4;
+    google.protobuf.Timestamp observed_at = 5;
+}
+
+message GetForecastRequest {
+  string city = 1 [
+    (buf.validate.field).string = { min_len: 2, max_len: 64 }
+  ];
+  int32 days = 2 [
+    (buf.validate.field).int32 = { gte: 1, lte: 2 }
+  ];
+}
+
+message GetForecastResponse {
+  string city = 1;
+  repeated DailyForecast days = 2;
+}
+
+message DailyForecast {
+  string date = 1;
+  double t_min = 2;
+  double t_max = 3;
+}
