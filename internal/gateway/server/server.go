@@ -5,11 +5,20 @@ import (
 	"time"
 )
 
+const (
+	readHeaderTimeout = 5 * time.Second
+	readTimeout       = 10 * time.Second
+	writeTimeout      = 10 * time.Second
+	idleTimeout       = 60 * time.Second
+)
+
 func New(addr string, hdlr http.Handler) *http.Server {
-	// TODO: выставлены базовые timeouts
 	return &http.Server{
 		Addr:              addr,
 		Handler:           hdlr,
-		ReadHeaderTimeout: 5 * time.Second,
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		WriteTimeout:      writeTimeout,
+		IdleTimeout:       idleTimeout,
 	}
 }

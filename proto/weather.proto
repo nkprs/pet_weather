@@ -31,7 +31,7 @@ message GetForecastRequest {
     (buf.validate.field).string = { min_len: 2, max_len: 64 }
   ];
   int32 days = 2 [
-    (buf.validate.field).int32 = { gte: 1, lte: 2 }
+    (buf.validate.field).int32 = { gte: 1, lte: 16 }
   ];
 }
 

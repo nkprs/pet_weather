@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -23,6 +24,11 @@ func main() {
 
 	httpAddr := env("GATEWAY_HTTP_ADDR", ":8081")
 	workerAddr := env("WORKER_GRPC_ADDR", "127.0.0.1:50051")
+	handlerCfg := httpapi.Config{
+		WorkerRPCTimeout: envDuration("GATEWAY_WORKER_RPC_TIMEOUT", 2*time.Second),
+		WeatherCacheTTL:  envDuration("GATEWAY_WEATHER_CACHE_TTL", 30*time.Second),
+		ForecastCacheTTL: envDuration("GATEWAY_FORECAST_CACHE_TTL", 2*time.Minute),
+	}
 
 	otelShutdown, err := observability.Init(context.Background(), "weather-gateway")
 	if err != nil {
@@ -46,7 +52,7 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	handler := httpapi.NewHandler(gClient.Weather)
+	handler := httpapi.NewHandlerWithConfig(gClient.Weather, handlerCfg)
 	httpapi.RegisterRoutes(mux, handler)
 
 	otelHandler := otelhttp.NewHandler(mux, "gateway-http")
@@ -79,8 +85,22 @@ func main() {
 }
 
 func env(key, def string) string {
-	if v := os.Getenv(key); v != "" {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
 		return v
 	}
 	return def
+}
+
+func envDuration(key string, def time.Duration) time.Duration {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return def
+	}
+
+	v, err := time.ParseDuration(raw)
+	if err != nil || v <= 0 {
+		slog.Warn("invalid duration env, using default", "key", key, "value", raw, "default", def.String())
+		return def
+	}
+	return v
 }

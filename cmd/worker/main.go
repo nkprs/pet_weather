@@ -4,8 +4,10 @@ import (
 	"context"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 	weatherpb "weather/proto"
@@ -26,6 +28,7 @@ func main() {
 	defer stop()
 
 	addr := env("WORKER_GRPC_ADDR", ":50051")
+	openMeteoTimeout := envDuration("WORKER_OPENMETEO_TIMEOUT", 2*time.Second)
 
 	otelShutdown, err := observability.Init(context.Background(), "weather-worker")
 	if err != nil {
@@ -53,7 +56,9 @@ func main() {
 		return
 	}
 
-	provider := openmeteo.NewProvider(nil)
+	provider := openmeteo.NewProvider(&http.Client{
+		Timeout: openMeteoTimeout,
+	})
 
 	svc := service.NewWeatherService(provider)
 	handler := handler.NewHandler(svc)
@@ -101,8 +106,22 @@ func main() {
 }
 
 func env(key, def string) string {
-	if v := os.Getenv(key); v != "" {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
 		return v
 	}
 	return def
+}
+
+func envDuration(key string, def time.Duration) time.Duration {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return def
+	}
+
+	v, err := time.ParseDuration(raw)
+	if err != nil || v <= 0 {
+		slog.Warn("invalid duration env, using default", "key", key, "value", raw, "default", def.String())
+		return def
+	}
+	return v
 }

@@ -15,20 +15,54 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+const statusClientClosedRequest = 499
+
+const (
+	defaultWorkerRPCTimeout = 2 * time.Second
+	defaultWeatherCacheTTL  = 30 * time.Second
+	defaultForecastCacheTTL = 2 * time.Minute
+)
+
+type Config struct {
+	WorkerRPCTimeout time.Duration
+	WeatherCacheTTL  time.Duration
+	ForecastCacheTTL time.Duration
+}
+
+func (c Config) normalized() Config {
+	if c.WorkerRPCTimeout <= 0 {
+		c.WorkerRPCTimeout = defaultWorkerRPCTimeout
+	}
+	if c.WeatherCacheTTL <= 0 {
+		c.WeatherCacheTTL = defaultWeatherCacheTTL
+	}
+	if c.ForecastCacheTTL <= 0 {
+		c.ForecastCacheTTL = defaultForecastCacheTTL
+	}
+	return c
+}
+
 type Handler struct {
-	grcp          weatherpb.WeatherServiceClient
-	weatherCache  *cache.Cache[CurrentWeatherResponse]
-	forecastCache *cache.Cache[ForecastResponse]
+	grcp             weatherpb.WeatherServiceClient
+	workerRPCTimeout time.Duration
+	weatherCache     *cache.Cache[CurrentWeatherResponse]
+	forecastCache    *cache.Cache[ForecastResponse]
 }
 
 func NewHandler(client weatherpb.WeatherServiceClient) *Handler {
-	weatherCache := cache.New[CurrentWeatherResponse](30 * time.Second)
-	forecastCache := cache.New[ForecastResponse](2 * time.Minute)
+	return NewHandlerWithConfig(client, Config{})
+}
 
+func NewHandlerWithConfig(client weatherpb.WeatherServiceClient, cfg Config) *Handler {
+	cfg = cfg.normalized()
+
+	weatherCache := cache.New[CurrentWeatherResponse](cfg.WeatherCacheTTL)
+	forecastCache := cache.New[ForecastResponse](cfg.ForecastCacheTTL)
 	return &Handler{
-		grcp:          client,
-		weatherCache:  weatherCache,
-		forecastCache: forecastCache,
+		grcp:             client,
+		workerRPCTimeout: cfg.WorkerRPCTimeout,
+		weatherCache:     weatherCache,
+		forecastCache:    forecastCache,
 	}
 }
 
@@ -53,7 +87,7 @@ func (h *Handler) GetCurrentWeather(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), h.workerRPCTimeout)
 	defer cancel()
 
 	resp, err := h.grcp.GetCurrentWeather(ctx, &weatherpb.GetCurrentWeatherRequest{
@@ -69,6 +103,8 @@ func (h *Handler) GetCurrentWeather(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusNotFound)
 			case codes.DeadlineExceeded:
 				w.WriteHeader(http.StatusGatewayTimeout)
+			case codes.Canceled:
+				w.WriteHeader(statusClientClosedRequest)
 			default:
 				w.WriteHeader(http.StatusServiceUnavailable)
 			}
@@ -114,7 +150,7 @@ func (h *Handler) GetForecast(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), h.workerRPCTimeout)
 	defer cancel()
 
 	resp, err := h.grcp.GetForecast(ctx, &weatherpb.GetForecastRequest{
@@ -131,6 +167,8 @@ func (h *Handler) GetForecast(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusNotFound)
 			case codes.DeadlineExceeded:
 				w.WriteHeader(http.StatusGatewayTimeout)
+			case codes.Canceled:
+				w.WriteHeader(statusClientClosedRequest)
 			default:
 				w.WriteHeader(http.StatusServiceUnavailable)
 			}

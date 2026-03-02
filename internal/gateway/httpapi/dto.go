@@ -14,7 +14,7 @@ type CurrentWeatherResponse struct {
 
 type ForecastQuery struct {
 	City string `validate:"required,min=2,max=64"`
-	Days int32  `validate:"required,min=1,max=2"`
+	Days int32  `validate:"required,min=1,max=16"`
 }
 
 type ForecastResponse struct {

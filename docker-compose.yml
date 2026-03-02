@@ -1,4 +1,14 @@
 services:
+  buf:
+    build:
+      context: .
+      dockerfile: Dockerfile.buf
+    profiles:
+      - tools
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+
   jaeger:
     image: jaegertracing/all-in-one:1.64.0
     environment:

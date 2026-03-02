@@ -63,6 +63,10 @@ func (h *Handler) GetForecast(ctx context.Context, req *weatherpb.GetForecastReq
 
 func mapErr(err error) error {
 	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return status.Error(codes.DeadlineExceeded, err.Error())
+	case errors.Is(err, context.Canceled):
+		return status.Error(codes.Canceled, err.Error())
 	case errors.Is(err, domain.ErrInvalidCity), errors.Is(err, domain.ErrInvalidDays):
 		return status.Error(codes.InvalidArgument, err.Error())
 	case errors.Is(err, domain.ErrCityNotFound):
